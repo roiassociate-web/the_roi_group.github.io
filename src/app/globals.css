@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: #f2f4f6;
+  color: #191f28;
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+}
+
+@layer components {
+  .ds-card {
+    @apply bg-surface rounded-card shadow-card p-5;
+  }
+  .ds-btn {
+    @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 text-[15px] font-semibold transition active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .ds-btn-primary {
+    @apply ds-btn bg-brand text-white hover:bg-brand-dark;
+  }
+  .ds-btn-ghost {
+    @apply ds-btn bg-surface-muted text-ink hover:bg-[#e9edf1];
+  }
+  .ds-chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}
