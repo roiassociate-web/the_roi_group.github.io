@@ -32,6 +32,14 @@ export const EVIDENCE_TYPES = [
 ] as const;
 export type EvidenceType = (typeof EVIDENCE_TYPES)[number];
 
+/**
+ * 원천징수 유형. 공제율이 다르다.
+ * - 사업소득: 3.3% (소득세 3% + 주민세 0.3%) — 일반적인 기본값
+ * - 기타소득: 8.8% (소득세 8% + 주민세 0.8%)
+ */
+export const WITHHOLDING_TYPES = ["사업소득", "기타소득"] as const;
+export type WithholdingType = (typeof WITHHOLDING_TYPES)[number];
+
 /** 개인/업체 구분 */
 export type PartyType = "개인" | "업체" | "확인 필요";
 
@@ -83,6 +91,7 @@ export interface LedgerEntry {
   costType: CostType; // 비용유형
   evidenceType: EvidenceType; // 증빙방식
   isWithholding: boolean; // 원천세대상여부
+  withholdingType: WithholdingType; // 원천징수 유형 (사업소득 3.3% / 기타소득 8.8%)
   isProjectCost: boolean; // 프로젝트비반영여부
   isMonthEndPayment: boolean; // 월말지급대상여부
   isBulkTransfer: boolean; // 대량이체포함여부

@@ -292,11 +292,14 @@ export function classifyRow(cells: Cells, ctx: ClassifyContext): LedgerEntry {
     evidenceType === "사업소득 신고" ||
     ["사업소득", "강사비", "용역비", "아르바이트비"].includes(costType);
 
+  // 원천징수 유형은 기본 사업소득(3.3%). 기타소득은 사용자가 수정에서 선택한다.
+  const withholdingType: LedgerEntry["withholdingType"] = "사업소득";
+
   let withholdingTax = 0;
   let residentTax = 0;
   let netAmount = preTaxAmount;
   if (isBizIncome && preTaxAmount > 0) {
-    const t = calcTaxFromPreTax(preTaxAmount);
+    const t = calcTaxFromPreTax(preTaxAmount, withholdingType);
     preTaxAmount = t.preTaxAmount;
     withholdingTax = t.withholdingTax;
     residentTax = t.residentTax;
@@ -315,6 +318,7 @@ export function classifyRow(cells: Cells, ctx: ClassifyContext): LedgerEntry {
     costType,
     evidenceType,
     isWithholding: false,
+    withholdingType,
     isProjectCost: false,
     isMonthEndPayment: false,
     isBulkTransfer: false,
@@ -362,8 +366,9 @@ export function reclassify(entry: LedgerEntry): LedgerEntry {
     e.evidenceType === "사업소득 신고" ||
     ["사업소득", "강사비", "용역비", "아르바이트비"].includes(e.costType);
 
+  if (!e.withholdingType) e.withholdingType = "사업소득"; // 과거 데이터 호환
   if (isBizIncome && !e.taxManualOverride && e.preTaxAmount > 0) {
-    const t = calcTaxFromPreTax(e.preTaxAmount);
+    const t = calcTaxFromPreTax(e.preTaxAmount, e.withholdingType);
     e.withholdingTax = t.withholdingTax;
     e.residentTax = t.residentTax;
     e.netAmount = t.netAmount;
