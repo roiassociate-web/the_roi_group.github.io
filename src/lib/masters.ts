@@ -2,6 +2,7 @@
 // 서버 저장 없이 localStorage에만 보관한다(복잡한 DB는 사용하지 않음).
 
 import { LedgerEntry, PayeeMaster, ProjectAlias, RecurringTemplate } from "./types";
+import { classifyRow } from "./classificationRules";
 
 const KEYS = {
   payee: "settlement.payeeMaster",
@@ -36,6 +37,10 @@ export function upsertPayeeMaster(p: PayeeMaster): void {
   if (idx >= 0) list[idx] = p;
   else list.push(p);
   save(KEYS.payee, list);
+}
+
+export function removePayeeMaster(name: string): void {
+  save(KEYS.payee, getPayeeMasters().filter((x) => x.name !== name));
 }
 
 /**
@@ -77,6 +82,23 @@ export function upsertProjectAlias(a: ProjectAlias): void {
   if (idx >= 0) list[idx] = a;
   else list.push(a);
   save(KEYS.alias, list);
+}
+
+export function removeProjectAlias(canonicalProject: string): void {
+  save(KEYS.alias, getProjectAliases().filter((x) => x.canonicalProject !== canonicalProject));
+}
+
+/**
+ * 약칭 사전을 적용해 고객사명/프로젝트명을 표준명으로 정규화한다.
+ * 매칭이 되면 표준명으로 채우고, 원래 값이 표준과 달랐다면 확인 사유를 남긴다.
+ */
+export function applyProjectAlias(entry: LedgerEntry): LedgerEntry {
+  const matched = matchProjectAlias(entry.projectName) || matchProjectAlias(entry.clientName);
+  if (!matched) return entry;
+  const e = { ...entry, reviewReasons: [...entry.reviewReasons] };
+  if (matched.canonicalClient && !e.clientName) e.clientName = matched.canonicalClient;
+  if (matched.canonicalProject) e.projectName = matched.canonicalProject;
+  return e;
 }
 
 /**
@@ -124,4 +146,49 @@ export function saveRecurringFromLedger(entries: LedgerEntry[]): void {
     return true;
   });
   save(KEYS.recurring, dedup);
+}
+
+export function removeRecurringTemplate(payeeName: string, costType: string): void {
+  save(
+    KEYS.recurring,
+    getRecurringTemplates().filter((t) => !(t.payeeName === payeeName && t.costType === costType))
+  );
+}
+
+let RECUR_SEQ = 9000;
+
+/**
+ * 이전 달 반복 항목을 이번 달 후보로 변환한다.
+ * 사용자는 금액·지급일·지급 여부만 확인하면 되도록 분류까지 마쳐 반환한다.
+ */
+export function recurringToEntries(
+  templates: RecurringTemplate[],
+  ym: string
+): LedgerEntry[] {
+  return templates.map((t) => {
+    const cells: Record<string, string | number | null> = {
+      대상자: t.payeeName,
+      고객사: t.clientName,
+      프로젝트: t.projectName,
+      비용유형: t.costType,
+      세전지급액: t.defaultPreTaxAmount,
+      지급상태: "지급예정",
+      메모: t.note ? `이전 달 반복 항목 · ${t.note}` : "이전 달 반복 항목",
+    };
+    const entry = classifyRow(cells, {
+      sourceFile: "이전 달 반복 항목",
+      sheetName: "반복",
+      rowIndex: 0,
+      attributionMonth: ym,
+      paymentMonth: ym,
+      reportMonth: ym,
+      idSeq: RECUR_SEQ++,
+    });
+    // 금액/지급 여부만 재확인하도록 확인 필요로 표시한다.
+    return {
+      ...entry,
+      itemStatus: "확인필요" as const,
+      reviewReasons: [...entry.reviewReasons, "이전 달 반복 항목이에요. 금액과 지급 여부만 확인해 주세요."],
+    };
+  });
 }

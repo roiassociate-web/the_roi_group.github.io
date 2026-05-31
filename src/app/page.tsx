@@ -10,8 +10,9 @@ import ReviewBox from "@/components/ReviewBox";
 import ChecklistPanel from "@/components/ChecklistPanel";
 import DownloadPanel from "@/components/DownloadPanel";
 import ReportMessage from "@/components/ReportMessage";
+import MastersPanel from "@/components/MastersPanel";
 
-type View = "home" | "upload" | "review" | "downloads" | "report" | "checklist";
+type View = "home" | "upload" | "review" | "downloads" | "report" | "checklist" | "masters";
 
 export default function Page() {
   const entries = useSettlementStore((s) => s.entries);
@@ -42,7 +43,12 @@ export default function Page() {
           <SummaryCards entries={entries} />
 
           {!hasData ? (
-            <FileUpload />
+            <div className="space-y-3">
+              <FileUpload />
+              <button className="ds-btn-ghost w-full" onClick={() => setView("masters")}>
+                입력 줄이기 · 대상자/약칭 미리 등록하기
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
               {/* 메인 버튼: 확인 필요한 항목부터 보기 */}
@@ -73,7 +79,7 @@ export default function Page() {
               <NextButton label="지급 목록 · 출력물" onClick={() => setView("downloads")} disabled={!canDownload} disabledHint="확인 필요 항목을 모두 처리하면 열려요." />
               <NextButton label="마감 체크리스트" onClick={() => setView("checklist")} disabled={!hasData} />
               <NextButton label="팀 보고 메시지" onClick={() => setView("report")} disabled={!hasData} />
-              <NextButton label="자료 더 넣기" onClick={() => setView("upload")} disabled={false} />
+              <NextButton label="입력 줄이기 (마스터)" onClick={() => setView("masters")} disabled={false} />
             </div>
           )}
 
@@ -119,6 +125,12 @@ export default function Page() {
       {view === "checklist" && (
         <Section title="마감 점검">
           <ChecklistPanel />
+        </Section>
+      )}
+
+      {view === "masters" && (
+        <Section title="입력 줄이기">
+          <MastersPanel />
         </Section>
       )}
     </main>

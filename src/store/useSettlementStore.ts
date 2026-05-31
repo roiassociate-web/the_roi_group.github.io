@@ -4,7 +4,13 @@
 import { create } from "zustand";
 import { LedgerEntry, ItemStatus, RevisionLog } from "@/lib/types";
 import { reclassify } from "@/lib/classificationRules";
-import { applyPayeeMaster } from "@/lib/masters";
+import {
+  applyPayeeMaster,
+  applyProjectAlias,
+  getRecurringTemplates,
+  recurringToEntries,
+  saveRecurringFromLedger,
+} from "@/lib/masters";
 
 export type WizardStep =
   | "자료 넣기"
@@ -20,6 +26,8 @@ interface SettlementState {
 
   addEntries: (entries: LedgerEntry[], fileName?: string) => void;
   loadSample: (entries: LedgerEntry[]) => void;
+  importRecurring: () => number;
+  saveRecurring: () => number;
   reset: () => void;
 
   approve: (id: string) => void;
@@ -64,8 +72,10 @@ export const useSettlementStore = create<SettlementState>((set, get) => ({
 
   addEntries: (incoming, fileName) =>
     set((state) => {
-      // 업로드 시 지급대상자 마스터 정보를 자동으로 채운다(입력 줄이기).
-      const enriched = incoming.map((e) => reclassify(applyPayeeMaster(e)));
+      // 업로드 시 지급대상자 마스터 + 약칭 사전을 자동 적용한다(입력 줄이기).
+      const enriched = incoming.map((e) =>
+        reclassify(applyProjectAlias(applyPayeeMaster(e)))
+      );
       return {
         entries: [...state.entries, ...enriched],
         loadedFiles: fileName
@@ -81,6 +91,34 @@ export const useSettlementStore = create<SettlementState>((set, get) => ({
       loadedFiles: [...new Set([...state.loadedFiles, "샘플데이터_5월.xlsx"])],
       completedSteps: { ...state.completedSteps, "자료 넣기": true },
     })),
+
+  // 이전 달 반복 항목을 이번 달 후보로 불러온다.
+  importRecurring: () => {
+    const templates = getRecurringTemplates();
+    if (templates.length === 0) return 0;
+    const state = get();
+    // 귀속월 기준: 이미 들어온 자료가 있으면 그 월을, 없으면 이번 달을 쓴다.
+    const ym =
+      state.entries[0]?.attributionMonth ??
+      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    const enriched = recurringToEntries(templates, ym).map((e) =>
+      reclassify(applyProjectAlias(applyPayeeMaster(e)))
+    );
+    set({
+      entries: [...state.entries, ...enriched],
+      completedSteps: { ...state.completedSteps, "자료 넣기": true },
+    });
+    return enriched.length;
+  },
+
+  // 현재 정산원장에서 반복 가능성 높은 항목을 다음 달용 템플릿으로 저장한다.
+  saveRecurring: () => {
+    const active = get().entries.filter(
+      (e) => e.itemStatus !== "제외" && e.itemStatus !== "보류"
+    );
+    saveRecurringFromLedger(active);
+    return getRecurringTemplates().length;
+  },
 
   reset: () =>
     set({ entries: [], loadedFiles: [], completedSteps: { ...STEP_DEFAULT } }),
