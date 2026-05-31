@@ -2,6 +2,7 @@
 // 서버 저장 없이 메모리 + (선택) localStorage 마스터만 사용한다.
 
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { LedgerEntry, ItemStatus, RevisionLog } from "@/lib/types";
 import { reclassify } from "@/lib/classificationRules";
 import {
@@ -65,7 +66,21 @@ function diffRevisions(
   return logs;
 }
 
-export const useSettlementStore = create<SettlementState>((set, get) => ({
+// 서버 렌더(정적 export) 중에는 localStorage가 없으므로 안전한 no-op 저장소를 쓴다.
+const safeStorage = createJSONStorage(() => {
+  if (typeof window === "undefined") {
+    return {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    };
+  }
+  return window.localStorage;
+});
+
+export const useSettlementStore = create<SettlementState>()(
+  persist(
+    (set, get) => ({
   entries: [],
   loadedFiles: [],
   completedSteps: { ...STEP_DEFAULT },
@@ -179,4 +194,20 @@ export const useSettlementStore = create<SettlementState>((set, get) => ({
     set((state) => ({
       completedSteps: { ...state.completedSteps, [step]: done },
     })),
-}));
+    }),
+    {
+      name: "settlement-ledger", // localStorage 키
+      storage: safeStorage,
+      version: 1,
+      // 데이터(정산원장/넣은 자료/단계)만 저장한다. 액션 함수는 저장하지 않는다.
+      partialize: (state) => ({
+        entries: state.entries,
+        loadedFiles: state.loadedFiles,
+        completedSteps: state.completedSteps,
+      }),
+      // 서버/클라이언트 첫 렌더를 동일하게 맞추려고 자동 복원을 끄고,
+      // 클라이언트 마운트 후 수동으로 rehydrate 한다(하이드레이션 불일치 방지).
+      skipHydration: true,
+    }
+  )
+);

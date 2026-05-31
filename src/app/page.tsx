@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSettlementStore } from "@/store/useSettlementStore";
 import { evaluateClosing } from "@/lib/closing";
 import SummaryCards from "@/components/SummaryCards";
@@ -17,7 +17,20 @@ type View = "home" | "upload" | "review" | "downloads" | "report" | "checklist" 
 export default function Page() {
   const entries = useSettlementStore((s) => s.entries);
   const completedSteps = useSettlementStore((s) => s.completedSteps);
+  const reset = useSettlementStore((s) => s.reset);
   const [view, setView] = useState<View>("home");
+
+  // 클라이언트 마운트 후 localStorage에서 이전 작업을 복원한다(새로고침 대비).
+  useEffect(() => {
+    useSettlementStore.persist.rehydrate();
+  }, []);
+
+  function onReset() {
+    if (window.confirm("지금까지 분류·승인한 내용을 모두 지우고 처음부터 시작할까요? (다운로드한 엑셀은 그대로 남아요)")) {
+      reset();
+      setView("home");
+    }
+  }
 
   const hasData = entries.length > 0;
   const reviewNeeded = entries.filter((e) => e.itemStatus === "확인필요").length;
@@ -69,6 +82,12 @@ export default function Page() {
                   전체 항목 보기
                 </button>
               </div>
+              <p className="text-center text-xs text-ink-faint">
+                작업 내용은 이 기기에 자동 저장돼요. 새로고침해도 그대로예요.{" "}
+                <button onClick={onReset} className="font-semibold text-ink-faint underline">
+                  처음부터 다시
+                </button>
+              </p>
             </div>
           )}
 
