@@ -198,7 +198,18 @@ export const useSettlementStore = create<SettlementState>()(
     {
       name: "settlement-ledger", // localStorage 키
       storage: safeStorage,
-      version: 1,
+      version: 2,
+      // v1 → v2: 원천징수 유형 필드(withholdingType) 추가. 기존 데이터는 사업소득으로 채운다.
+      migrate: (persisted: unknown) => {
+        const state = persisted as Partial<SettlementState> | undefined;
+        if (state?.entries) {
+          state.entries = state.entries.map((e) => ({
+            ...e,
+            withholdingType: e.withholdingType ?? "사업소득",
+          }));
+        }
+        return state as SettlementState;
+      },
       // 데이터(정산원장/넣은 자료/단계)만 저장한다. 액션 함수는 저장하지 않는다.
       partialize: (state) => ({
         entries: state.entries,

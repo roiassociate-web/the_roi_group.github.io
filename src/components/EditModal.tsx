@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LedgerEntry, COST_TYPES, EVIDENCE_TYPES, PartyType, PaymentStatus, PaymentMethod } from "@/lib/types";
-import { calcTaxFromPreTax, calcTaxFromNet } from "@/lib/taxCalc";
+import { LedgerEntry, COST_TYPES, EVIDENCE_TYPES, PartyType, PaymentStatus, PaymentMethod, WithholdingType } from "@/lib/types";
+import { calcTaxFromPreTax, calcTaxFromNet, WITHHOLDING_RATES } from "@/lib/taxCalc";
 import { won } from "@/lib/format";
 import { useSettlementStore } from "@/store/useSettlementStore";
 
@@ -33,21 +33,32 @@ export default function EditModal({ entry, onClose }: Props) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  const whType: WithholdingType = form.withholdingType ?? "사업소득";
+
   // 세전 지급액이 바뀌면 즉시 세금 재계산 (잠금 상태일 때만).
   function onPreTaxChange(v: number) {
     if (bizIncome && !taxUnlocked) {
-      const t = calcTaxFromPreTax(v);
+      const t = calcTaxFromPreTax(v, whType);
       setForm((f) => ({ ...f, preTaxAmount: t.preTaxAmount, withholdingTax: t.withholdingTax, residentTax: t.residentTax, netAmount: t.netAmount }));
     } else {
       set("preTaxAmount", v);
     }
   }
 
+  // 원천징수 유형(사업소득 3.3% / 기타소득 8.8%)을 바꾸면 즉시 재계산.
+  function onWithholdingTypeChange(type: WithholdingType) {
+    setForm((f) => {
+      if (taxUnlocked) return { ...f, withholdingType: type };
+      const t = calcTaxFromPreTax(f.preTaxAmount, type);
+      return { ...f, withholdingType: type, withholdingTax: t.withholdingTax, residentTax: t.residentTax, netAmount: t.netAmount };
+    });
+  }
+
   // "이 금액은 세전인가요, 실지급액인가요?" 처리
   function answerNet(asNet: boolean) {
     const amount = form.preTaxAmount;
     if (bizIncome) {
-      const t = asNet ? calcTaxFromNet(amount) : calcTaxFromPreTax(amount);
+      const t = asNet ? calcTaxFromNet(amount, whType) : calcTaxFromPreTax(amount, whType);
       setForm((f) => ({ ...f, preTaxAmount: t.preTaxAmount, withholdingTax: t.withholdingTax, residentTax: t.residentTax, netAmount: t.netAmount }));
     }
     setAskNetOrPre(false);
@@ -65,6 +76,7 @@ export default function EditModal({ entry, onClose }: Props) {
       paymentMethod: form.paymentMethod,
       preTaxAmount: form.preTaxAmount,
       totalAmount: form.totalAmount,
+      withholdingType: form.withholdingType ?? "사업소득",
       bankName: form.bankName,
       accountNumber: form.accountNumber,
       accountHolder: form.accountHolder,
@@ -170,12 +182,34 @@ export default function EditModal({ entry, onClose }: Props) {
                   {taxUnlocked ? "자동 계산으로 되돌리기" : "수동 수정"}
                 </button>
               </div>
+
+              {/* 원천징수 유형 선택 — 기본은 사업소득 3.3% */}
+              <div className="mb-3">
+                <span className="mb-1 block text-[11px] text-ink-faint">원천징수 유형</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["사업소득", "기타소득"] as WithholdingType[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => onWithholdingTypeChange(t)}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                        whType === t ? "bg-brand text-white" : "bg-surface text-ink-soft"
+                      }`}
+                    >
+                      {t} {WITHHOLDING_RATES[t].totalLabel}
+                      {t === "사업소득" ? " · 기본" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <TaxBox label="원천세" value={form.withholdingTax} locked={!taxUnlocked} onChange={(v) => set("withholdingTax", v)} />
                 <TaxBox label="주민세" value={form.residentTax} locked={!taxUnlocked} onChange={(v) => set("residentTax", v)} />
                 <TaxBox label="실지급액" value={form.netAmount} locked={!taxUnlocked} onChange={(v) => set("netAmount", v)} />
               </div>
-              <p className="mt-2 text-xs text-ink-faint">실지급액 {won(form.netAmount)} (세전 기준 3.3% 공제)</p>
+              <p className="mt-2 text-xs text-ink-faint">
+                실지급액 {won(form.netAmount)} ({whType} · 세전 기준 {WITHHOLDING_RATES[whType].totalLabel} 공제)
+              </p>
               {taxUnlocked && (
                 <input
                   className="ds-input mt-2"

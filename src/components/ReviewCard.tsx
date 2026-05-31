@@ -60,7 +60,7 @@ export default function ReviewCard({ entry }: Props) {
       {/* 사업소득 안내 + 세금 자동 계산 결과 */}
       {entry.evidenceType === "사업소득 신고" && entry.withholdingTax > 0 && (
         <p className="rounded-xl bg-surface-muted px-3 py-2 text-xs text-ink-soft">
-          사업소득 신고 대상으로 보여요. 원천세 {won(entry.withholdingTax)}, 주민세 {won(entry.residentTax)}를 자동 계산해두었어요.
+          {entry.withholdingType === "기타소득" ? "기타소득(8.8%)" : "사업소득(3.3%)"} 신고 대상으로 보여요. 원천세 {won(entry.withholdingTax)}, 주민세 {won(entry.residentTax)}를 자동 계산해두었어요.
         </p>
       )}
 
