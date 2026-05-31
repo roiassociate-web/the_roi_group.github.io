@@ -4,7 +4,7 @@ name: Deploy to GitHub Pages
 # 수동 실행(workflow_dispatch)도 가능하다.
 on:
   push:
-    branches: [main]
+    branches: [main, claude/monthly-settlement-checkroom-plBUu]
   workflow_dispatch:
 
 # GitHub Pages 배포에 필요한 권한
@@ -39,9 +39,14 @@ jobs:
 
       - name: Build (static export)
         run: npm run build
+        env:
+          GITHUB_PAGES: "true"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # 저장소에 Pages가 아직 켜져 있지 않으면 자동으로 활성화한다.
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
