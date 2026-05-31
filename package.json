@@ -4,9 +4,9 @@
   "private": true,
   "description": "더로이그룹 월말 정산 체크룸 - 자동 분류 검토함",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3100",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"
