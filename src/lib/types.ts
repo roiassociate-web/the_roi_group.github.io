@@ -111,6 +111,7 @@ export interface LedgerEntry {
 
   // 계좌/담당
   paymentDate: string; // 지급일 (YYYY-MM-DD)
+  idOrBizNumber: string; // 주민등록번호 또는 사업자등록번호 (원천세 신고자료용)
   bankName: string; // 은행명
   bankCode: string; // 은행코드
   accountNumber: string; // 계좌번호
@@ -136,9 +137,13 @@ export interface RawRow {
   cells: Record<string, string | number | null>;
 }
 
-/** 지급대상자 마스터 */
+/**
+ * 지급대상자 마스터 — 지급처의 간단한 DB.
+ * 한 번 입력/매핑하면 다음부터 자동으로 채워진다.
+ */
 export interface PayeeMaster {
-  name: string; // 성명 또는 업체명
+  name: string; // 성명 또는 업체명 (표준 표기)
+  aliases?: string[]; // 다른 표기들 ("김철수 강사" 등). 한 번 매핑하면 여기 저장된다.
   partyType: PartyType;
   bankName: string;
   bankCode: string;
@@ -147,6 +152,7 @@ export interface PayeeMaster {
   idOrBizNumber: string; // 주민등록번호 또는 사업자등록번호
   defaultEvidence: EvidenceType;
   defaultWithholding: boolean;
+  defaultWithholdingType?: WithholdingType; // 사업소득/기타소득 기본값
 }
 
 /** 프로젝트/고객사 약칭 사전 */

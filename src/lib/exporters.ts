@@ -51,7 +51,7 @@ const LEDGER_HEADERS = [
   "원천세대상", "소득구분", "프로젝트비반영", "월말지급대상", "대량이체포함",
   "지급상태", "지급방법", "공급가액", "부가세", "총금액",
   "세전지급액", "원천세", "주민세", "실지급액",
-  "지급일", "은행명", "은행코드", "계좌번호", "예금주",
+  "지급일", "주민/사업자번호", "은행명", "은행코드", "계좌번호", "예금주",
   "담당자", "메모", "처리상태", "신뢰도", "확인필요사유",
 ];
 
@@ -82,6 +82,7 @@ function ledgerRow(e: LedgerEntry): Record<string, unknown> {
     주민세: e.residentTax,
     실지급액: e.netAmount,
     지급일: e.paymentDate,
+    "주민/사업자번호": e.idOrBizNumber ?? "",
     은행명: e.bankName,
     은행코드: e.bankCode,
     계좌번호: e.accountNumber,
@@ -148,10 +149,11 @@ export function exportAllowance(entries: LedgerEntry[]): void {
 // 4) 원천세 신고자료 엑셀 (세전/원천세/주민세/실지급액 모두 포함)
 // ---------------------------------------------------------------------------
 export function exportWithholding(entries: LedgerEntry[]): void {
-  const headers = ["신고월", "성명/업체명", "개인/업체", "소득구분", "비용유형", "세전지급액", "원천세", "주민세", "실지급액", "지급일", "메모"];
+  const headers = ["신고월", "성명/업체명", "주민/사업자번호", "개인/업체", "소득구분", "비용유형", "세전지급액", "원천세", "주민세", "실지급액", "지급일", "메모"];
   const rows = selectWithholding(entries).map((e) => ({
     신고월: e.reportMonth,
     "성명/업체명": e.payeeName,
+    "주민/사업자번호": e.idOrBizNumber ?? "",
     "개인/업체": e.partyType,
     소득구분: e.withholdingType ?? "사업소득",
     비용유형: e.costType,

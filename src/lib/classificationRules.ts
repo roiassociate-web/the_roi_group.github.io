@@ -215,6 +215,11 @@ export function computeReviewReasons(entry: LedgerEntry): string[] {
   if (!entry.projectName) reasons.push("어느 프로젝트에 귀속되는지 확인이 필요해요.");
   if (amount <= 0) reasons.push("금액이 비어 있거나 0원이에요.");
 
+  // 원천세 신고 대상인데 주민/사업자번호가 없는 경우 (신고자료 필수값)
+  if (entry.isWithholding && !entry.idOrBizNumber) {
+    reasons.push("원천세 신고에 필요한 주민/사업자번호가 없어요.");
+  }
+
   // 대량이체 대상인데 계좌정보가 부족한 경우
   if (entry.isMonthEndPayment && entry.paymentStatus === "지급예정") {
     if (!entry.bankName) reasons.push("은행명이 비어 있어요.");
@@ -272,6 +277,7 @@ export function classifyRow(cells: Cells, ctx: ClassifyContext): LedgerEntry {
   const bankName = findCell(cells, ["은행", "bank"]);
   const accountNumber = findCell(cells, ["계좌", "account"]);
   const accountHolder = findCell(cells, ["예금주", "holder"]) || payeeName;
+  const idOrBizNumber = findCell(cells, ["주민등록번호", "주민번호", "사업자등록번호", "사업자번호", "등록번호"]);
 
   const costType = inferCostType(haystack, ctx.sourceFile);
   const partyType = inferPartyType(costType, haystack + " " + payeeName);
@@ -332,6 +338,7 @@ export function classifyRow(cells: Cells, ctx: ClassifyContext): LedgerEntry {
     residentTax,
     netAmount,
     paymentDate: "",
+    idOrBizNumber,
     bankName,
     bankCode: bankNameToCode(bankName),
     accountNumber,

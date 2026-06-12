@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LedgerEntry, EvidenceType, PartyType, PaymentStatus } from "@/lib/types";
 import { useSettlementStore } from "@/store/useSettlementStore";
 import { reclassify, isApprovable } from "@/lib/classificationRules";
 import { isKnownBank } from "@/lib/bankCodes";
+import { suggestPayeeMasters, addPayeeAlias } from "@/lib/masters";
 import { won } from "@/lib/format";
 import EditModal from "./EditModal";
 
@@ -132,9 +133,34 @@ function QueueCard({ entry, onResolved }: CardProps) {
   const exclude = useSettlementStore((s) => s.exclude);
   const [draft, setDraft] = useState<Partial<LedgerEntry>>({});
   const [fullEdit, setFullEdit] = useState(false);
+  const [mappingDismissed, setMappingDismissed] = useState(false);
 
   const merged = { ...entry, ...draft };
   const amount = merged.netAmount || merged.preTaxAmount || merged.totalAmount;
+
+  // 등록된 대상자와 비슷한 이름이면 최초 매핑을 제안한다(한 번 연결하면 다음부터 자동).
+  const masterSuggestions = useMemo(
+    () => suggestPayeeMasters(entry.payeeName),
+    [entry.payeeName]
+  );
+  const showMapping = !mappingDismissed && masterSuggestions.length > 0;
+
+  function pickMaster(masterName: string) {
+    const m = masterSuggestions.find((x) => x.name === masterName);
+    if (!m) return;
+    // 별칭으로 저장 → 다음부터 자동 매핑된다.
+    addPayeeAlias(m.name, entry.payeeName);
+    // 마스터 정보를 초안에 채운다(빈 값만).
+    setDraft((d) => ({
+      ...d,
+      bankName: d.bankName ?? (entry.bankName || m.bankName),
+      accountNumber: d.accountNumber ?? (entry.accountNumber || m.accountNumber),
+      accountHolder: d.accountHolder ?? (entry.accountHolder || m.accountHolder),
+      idOrBizNumber: d.idOrBizNumber ?? (entry.idOrBizNumber || m.idOrBizNumber),
+      partyType: entry.partyType === "확인 필요" ? m.partyType : entry.partyType,
+    }));
+    setMappingDismissed(true);
+  }
 
   // 이 항목에서 물어볼 것들만 추려낸다.
   const needsParty = merged.partyType === "확인 필요";
@@ -148,10 +174,12 @@ function QueueCard({ entry, onResolved }: CardProps) {
   const needsBank = wantsAccount && (!merged.bankName || !isKnownBank(merged.bankName));
   const needsAccountNo = wantsAccount && !merged.accountNumber;
   const needsHolder = wantsAccount && !merged.accountHolder;
+  const needsIdNumber = merged.isWithholding && !merged.idOrBizNumber;
 
   const hasQuestions =
     needsParty || needsStatus || needsEvidence || needsName ||
-    needsProject || needsAmount || needsBank || needsAccountNo || needsHolder;
+    needsProject || needsAmount || needsBank || needsAccountNo || needsHolder ||
+    needsIdNumber;
   const answered = Object.keys(draft).length > 0;
 
   function setField<K extends keyof LedgerEntry>(key: K, value: LedgerEntry[K]) {
@@ -199,6 +227,29 @@ function QueueCard({ entry, onResolved }: CardProps) {
             : "원천세 신고 없이 처리하는 항목으로 분류했어요."}
         {entry.isBulkTransfer ? " 대량이체에 포함돼요." : ""}
       </p>
+
+      {/* 최초 매핑 — 한 번 연결하면 다음부터 자동 매핑 */}
+      {showMapping && (
+        <Question label={`혹시 등록된 대상자인가요? 연결하면 다음부터 자동으로 채워져요.`}>
+          <div className="flex flex-wrap gap-2">
+            {masterSuggestions.map((m) => (
+              <button
+                key={m.name}
+                onClick={() => pickMaster(m.name)}
+                className="rounded-xl bg-surface px-4 py-2.5 text-sm font-semibold text-ink-soft"
+              >
+                {m.name}{m.bankName ? ` · ${m.bankName}` : ""}
+              </button>
+            ))}
+            <button
+              onClick={() => setMappingDismissed(true)}
+              className="rounded-xl px-4 py-2.5 text-sm text-ink-faint"
+            >
+              아니요, 새 대상자예요
+            </button>
+          </div>
+        </Question>
+      )}
 
       {/* 질문들 — 부족한 것만 */}
       {needsName && (
@@ -262,6 +313,18 @@ function QueueCard({ entry, onResolved }: CardProps) {
             value={String(draft.projectName ?? "")}
             onChange={(e) => setField("projectName", e.target.value)}
           />
+        </Question>
+      )}
+
+      {needsIdNumber && (
+        <Question label="원천세 신고에 필요한 주민등록번호(또는 사업자번호)를 알려주세요.">
+          <input
+            className="ds-input"
+            placeholder={merged.partyType === "업체" ? "사업자등록번호" : "주민등록번호"}
+            value={String(draft.idOrBizNumber ?? "")}
+            onChange={(e) => setField("idOrBizNumber", e.target.value)}
+          />
+          <p className="text-xs text-ink-faint">한 번 입력하면 저장돼서 다음 달부터 자동으로 채워져요.</p>
         </Question>
       )}
 

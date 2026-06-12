@@ -77,6 +77,7 @@ export default function EditModal({ entry, onClose }: Props) {
       preTaxAmount: form.preTaxAmount,
       totalAmount: form.totalAmount,
       withholdingType: form.withholdingType ?? "사업소득",
+      idOrBizNumber: form.idOrBizNumber,
       bankName: form.bankName,
       accountNumber: form.accountNumber,
       accountHolder: form.accountHolder,
@@ -231,6 +232,9 @@ export default function EditModal({ entry, onClose }: Props) {
           </div>
           <Field label="예금주">
             <input className="ds-input" value={form.accountHolder} onChange={(e) => set("accountHolder", e.target.value)} />
+          </Field>
+          <Field label="주민/사업자등록번호 (원천세 신고용)">
+            <input className="ds-input" value={form.idOrBizNumber ?? ""} onChange={(e) => set("idOrBizNumber", e.target.value)} />
           </Field>
           <Field label="메모">
             <input className="ds-input" value={form.memo} onChange={(e) => set("memo", e.target.value)} />
