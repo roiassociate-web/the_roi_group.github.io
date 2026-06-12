@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LedgerEntry, EvidenceType, PartyType, PaymentStatus } from "@/lib/types";
 import { useSettlementStore } from "@/store/useSettlementStore";
 import { reclassify, isApprovable } from "@/lib/classificationRules";
@@ -174,24 +174,41 @@ function QueueCard({ entry, onResolved }: CardProps) {
     return `${m.name}${parts.length ? " · " + parts.join(" ") : ""}`;
   }
 
-  // 이 항목에서 물어볼 것들만 추려낸다.
-  const needsParty = merged.partyType === "확인 필요";
-  const needsStatus = merged.paymentStatus === "확인 필요";
-  const needsEvidence = merged.evidenceType === "확인 필요";
-  const needsName = !merged.payeeName;
-  const needsProject = !merged.projectName;
-  const needsAmount = amount <= 0;
+  // 이 항목에서 아직 부족한 것들(실시간).
   const wantsAccount =
     merged.isMonthEndPayment && (draft.paymentStatus ?? entry.paymentStatus) === "지급예정";
-  const needsBank = wantsAccount && (!merged.bankName || !isKnownBank(merged.bankName));
-  const needsAccountNo = wantsAccount && !merged.accountNumber;
-  const needsHolder = wantsAccount && !merged.accountHolder;
-  const needsIdNumber = merged.isWithholding && !merged.idOrBizNumber;
+  const need = {
+    party: merged.partyType === "확인 필요",
+    status: merged.paymentStatus === "확인 필요",
+    evidence: merged.evidenceType === "확인 필요",
+    name: !merged.payeeName,
+    project: !merged.projectName,
+    amount: amount <= 0,
+    bank: wantsAccount && (!merged.bankName || !isKnownBank(merged.bankName)),
+    accountNo: wantsAccount && !merged.accountNumber,
+    holder: wantsAccount && !merged.accountHolder,
+    idNumber: merged.isWithholding && !merged.idOrBizNumber,
+  };
 
-  const hasQuestions =
-    needsParty || needsStatus || needsEvidence || needsName ||
-    needsProject || needsAmount || needsBank || needsAccountNo || needsHolder ||
-    needsIdNumber;
+  // 한 번 나타난 질문은 입력 중에 사라지지 않도록 "노출됨"으로 기억한다.
+  // (값을 채우는 순간 칸이 사라지던 문제 방지)
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const toAdd = (Object.keys(need) as (keyof typeof need)[]).filter((k) => need[k] && !revealed[k]);
+    if (toAdd.length) {
+      setRevealed((r) => {
+        const n = { ...r };
+        toAdd.forEach((k) => (n[k] = true));
+        return n;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [need.party, need.status, need.evidence, need.name, need.project, need.amount, need.bank, need.accountNo, need.holder, need.idNumber]);
+
+  const show = (k: keyof typeof need) => need[k] || revealed[k];
+
+  // 아직 입력이 끝나지 않은 필수 항목이 있는지(실시간).
+  const hasUnanswered = Object.values(need).some(Boolean);
   const answered = Object.keys(draft).length > 0;
 
   function setField<K extends keyof LedgerEntry>(key: K, value: LedgerEntry[K]) {
@@ -214,7 +231,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
     onResolved("승인했어요 ✓");
   }
 
-  const approvable = isApprovable(entry) && !hasQuestions;
+  const approvable = isApprovable(entry) && !hasUnanswered;
 
   return (
     <div className="ds-card space-y-4">
@@ -287,7 +304,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
       )}
 
       {/* 질문들 — 부족한 것만 */}
-      {needsName && (
+      {show("name") && (
         <Question label="누구에게 지급하는 항목인가요?">
           <input
             className="ds-input"
@@ -298,7 +315,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsParty && (
+      {show("party") && (
         <Question label="개인에게 지급하나요, 업체에게 지급하나요?">
           <ChipRow
             options={["개인", "업체"]}
@@ -308,7 +325,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsStatus && (
+      {show("status") && (
         <Question label="이 항목은 지급 예정인가요, 이미 지급했나요?">
           <ChipRow
             options={["지급예정", "지급완료", "지급보류"]}
@@ -318,7 +335,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsEvidence && (
+      {show("evidence") && (
         <Question label="증빙은 어떻게 처리하나요?">
           <ChipRow
             options={["사업소득 신고", "세금계산서", "신용카드", "현금영수증", "내부정산"]}
@@ -328,7 +345,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsAmount && (
+      {show("amount") && (
         <Question label="지급할 금액(세전)을 알려주세요.">
           <input
             type="number"
@@ -340,7 +357,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsProject && (
+      {show("project") && (
         <Question label="어느 프로젝트에 귀속되나요?">
           <input
             className="ds-input"
@@ -351,7 +368,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {needsIdNumber && (
+      {show("idNumber") && (
         <Question label="원천세 신고에 필요한 주민등록번호(또는 사업자번호)를 알려주세요.">
           <input
             className="ds-input"
@@ -363,10 +380,10 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {(needsBank || needsAccountNo || needsHolder) && (
+      {(show("bank") || show("accountNo") || show("holder")) && (
         <Question label="이체할 계좌 정보가 필요해요.">
           <div className="space-y-2">
-            {needsBank && (
+            {show("bank") && (
               <input
                 className="ds-input"
                 placeholder={merged.bankName ? `은행명 확인 필요 (현재: ${merged.bankName})` : "은행명 (예: 신한은행)"}
@@ -374,7 +391,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
                 onChange={(e) => setField("bankName", e.target.value)}
               />
             )}
-            {needsAccountNo && (
+            {show("accountNo") && (
               <input
                 className="ds-input"
                 placeholder="계좌번호"
@@ -382,7 +399,7 @@ function QueueCard({ entry, onResolved }: CardProps) {
                 onChange={(e) => setField("accountNumber", e.target.value)}
               />
             )}
-            {needsHolder && (
+            {show("holder") && (
               <input
                 className="ds-input"
                 placeholder={`예금주 (보통 ${merged.payeeName || "대상자"}와 동일)`}
@@ -394,14 +411,14 @@ function QueueCard({ entry, onResolved }: CardProps) {
         </Question>
       )}
 
-      {/* 메인 버튼 하나 */}
-      {hasQuestions ? (
-        <button
-          className="ds-btn-primary w-full py-4 text-base"
-          disabled={!answered}
-          onClick={onSave}
-        >
-          {answered ? "저장하고 다음" : "위 질문에 답해주세요"}
+      {/* 메인 버튼 하나 — 입력한 게 있으면 저장 우선(입력 손실 방지) */}
+      {answered ? (
+        <button className="ds-btn-primary w-full py-4 text-base" onClick={onSave}>
+          {hasUnanswered ? "여기까지 저장하고 다음" : "저장하고 다음"}
+        </button>
+      ) : hasUnanswered ? (
+        <button className="ds-btn-primary w-full py-4 text-base" disabled>
+          위 질문에 답해주세요
         </button>
       ) : (
         <button
