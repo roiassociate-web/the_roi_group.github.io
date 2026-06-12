@@ -121,6 +121,24 @@ function Toast({ msg }: { msg: string }) {
 // 카드 한 장 — 부족한 정보만 질문한다.
 // ---------------------------------------------------------------------------
 
+/** 항목에서 아직 부족해서 물어봐야 하는 것들. (순수 함수) */
+function computeNeeds(m: LedgerEntry) {
+  const amount = m.netAmount || m.preTaxAmount || m.totalAmount;
+  const wantsAccount = m.isMonthEndPayment && m.paymentStatus === "지급예정";
+  return {
+    party: m.partyType === "확인 필요",
+    status: m.paymentStatus === "확인 필요",
+    evidence: m.evidenceType === "확인 필요",
+    name: !m.payeeName,
+    project: !m.projectName,
+    amount: amount <= 0,
+    bank: wantsAccount && (!m.bankName || !isKnownBank(m.bankName)),
+    accountNo: wantsAccount && !m.accountNumber,
+    holder: wantsAccount && !m.accountHolder,
+    idNumber: m.isWithholding && !m.idOrBizNumber,
+  };
+}
+
 interface CardProps {
   entry: LedgerEntry;
   onResolved: (toast: string) => void;
@@ -175,24 +193,19 @@ function QueueCard({ entry, onResolved }: CardProps) {
   }
 
   // 이 항목에서 아직 부족한 것들(실시간).
-  const wantsAccount =
-    merged.isMonthEndPayment && (draft.paymentStatus ?? entry.paymentStatus) === "지급예정";
-  const need = {
-    party: merged.partyType === "확인 필요",
-    status: merged.paymentStatus === "확인 필요",
-    evidence: merged.evidenceType === "확인 필요",
-    name: !merged.payeeName,
-    project: !merged.projectName,
-    amount: amount <= 0,
-    bank: wantsAccount && (!merged.bankName || !isKnownBank(merged.bankName)),
-    accountNo: wantsAccount && !merged.accountNumber,
-    holder: wantsAccount && !merged.accountHolder,
-    idNumber: merged.isWithholding && !merged.idOrBizNumber,
-  };
+  const need = computeNeeds(merged);
 
-  // 한 번 나타난 질문은 입력 중에 사라지지 않도록 "노출됨"으로 기억한다.
-  // (값을 채우는 순간 칸이 사라지던 문제 방지)
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  // 처음에 보여줄 질문은 마운트 시점에 확정한다. 이렇게 하면 첫 글자를 칠 때
+  // "노출됨" 기억이 비어 있어 칸이 사라지던 타이밍 문제가 생기지 않는다.
+  const [revealed, setRevealed] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    const start = computeNeeds(entry);
+    (Object.keys(start) as (keyof typeof start)[]).forEach((k) => {
+      if (start[k]) init[k] = true;
+    });
+    return init;
+  });
+  // 나중 조건으로 새로 필요해지는 칸(예: 지급예정 선택 후 계좌)은 추가로 노출한다.
   useEffect(() => {
     const toAdd = (Object.keys(need) as (keyof typeof need)[]).filter((k) => need[k] && !revealed[k]);
     if (toAdd.length) {
@@ -205,7 +218,8 @@ function QueueCard({ entry, onResolved }: CardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [need.party, need.status, need.evidence, need.name, need.project, need.amount, need.bank, need.accountNo, need.holder, need.idNumber]);
 
-  const show = (k: keyof typeof need) => need[k] || revealed[k];
+  // 한 번 노출된 칸은 입력이 끝날 때까지 유지한다.
+  const show = (k: keyof ReturnType<typeof computeNeeds>) => !!revealed[k];
 
   // 아직 입력이 끝나지 않은 필수 항목이 있는지(실시간).
   const hasUnanswered = Object.values(need).some(Boolean);
