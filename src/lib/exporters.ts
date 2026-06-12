@@ -17,6 +17,7 @@ import {
   selectExcluded,
 } from "./selectors";
 import { evaluateClosing } from "./closing";
+import { IncentiveStatement } from "./incentive";
 
 /** 헤더 순서를 고정해 객체 배열을 시트로 만든다(컬럼 깨짐 방지). */
 function sheetFromRows(headers: string[], rows: Record<string, unknown>[]): XLSX.WorkSheet {
@@ -273,4 +274,37 @@ function stamp(): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
     d.getDate()
   ).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// 8) 수당명세서 (성과 수당) — 수령자별 시트
+// ---------------------------------------------------------------------------
+export function exportIncentiveStatements(statements: IncentiveStatement[], month: string): void {
+  const headers = ["프로젝트", "고객사", "교육명", "역할", "비율", "수금공급가액", "비용", "매출이익(수금-비용)", "산출수당"];
+  const wb = XLSX.utils.book_new();
+
+  if (statements.length === 0) {
+    XLSX.utils.book_append_sheet(wb, sheetFromRows(headers, []), "수당명세서");
+  }
+  for (const st of statements) {
+    const rows: Record<string, unknown>[] = st.lines.map((l) => ({
+      프로젝트: l.projectName,
+      고객사: l.clientName,
+      교육명: l.educationName,
+      역할: l.role || "(미지정)",
+      비율: l.rate ? `${Math.round(l.rate * 100)}%` : "-",
+      수금공급가액: l.revenue,
+      비용: l.cost,
+      "매출이익(수금-비용)": l.margin,
+      산출수당: l.incentive,
+    }));
+    rows.push({
+      프로젝트: "합계", 고객사: "", 교육명: "", 역할: "", 비율: "",
+      수금공급가액: "", 비용: "", "매출이익(수금-비용)": "", 산출수당: st.total,
+    });
+    // 시트명은 31자 제한 + 특수문자 회피
+    const safe = `${st.recipient}`.replace(/[\\/?*\[\]:]/g, " ").slice(0, 28) || "수령자";
+    XLSX.utils.book_append_sheet(wb, sheetFromRows(headers, rows), safe);
+  }
+  downloadWorkbook(wb, `수당명세서_${month}_${stamp()}.xlsx`);
 }

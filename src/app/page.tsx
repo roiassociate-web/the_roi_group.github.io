@@ -13,9 +13,10 @@ import ChecklistPanel from "@/components/ChecklistPanel";
 import DownloadPanel from "@/components/DownloadPanel";
 import ReportMessage from "@/components/ReportMessage";
 import MastersPanel from "@/components/MastersPanel";
+import IncentivePanel from "@/components/IncentivePanel";
 
 // 배포 확인용 빌드 표시(새 버전이 떴는지 서로 확인할 때 사용).
-const BUILD_TAG = "build r8 · 06-12";
+const BUILD_TAG = "build r9 · 06-12";
 
 type View =
   | "home"
@@ -26,7 +27,8 @@ type View =
   | "downloads"
   | "report"
   | "checklist"
-  | "masters";
+  | "masters"
+  | "incentive";
 
 export default function Page() {
   const entries = useSettlementStore((s) => s.entries);
@@ -146,6 +148,7 @@ export default function Page() {
                 <SmallLink label="자료 추가하기" onClick={() => setView("upload")} />
                 <SmallLink label="전체 항목 보기" onClick={() => setView("all")} />
                 <SmallLink label="출력물 다운로드" onClick={() => setView("downloads")} />
+                <SmallLink label="수당명세서" onClick={() => setView("incentive")} />
                 <SmallLink label="마감 점검" onClick={() => setView("checklist")} />
                 <SmallLink label="입력 줄이기" onClick={() => setView("masters")} />
                 <SmallLink label="처음부터 다시" onClick={onReset} danger />
@@ -233,6 +236,12 @@ export default function Page() {
       {view === "masters" && (
         <Section title="입력 줄이기">
           <MastersPanel />
+        </Section>
+      )}
+
+      {view === "incentive" && (
+        <Section title="수당명세서">
+          <IncentivePanel />
         </Section>
       )}
 

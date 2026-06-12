@@ -2,8 +2,9 @@
 // 텍스트 메모도 행으로 변환한 뒤 자동 분류 후보를 만든다.
 
 import * as XLSX from "xlsx";
-import { LedgerEntry } from "./types";
+import { LedgerEntry, RevenueReceipt } from "./types";
 import { classifyRow, ClassifyContext } from "./classificationRules";
+import { matchProjectAlias } from "./masters";
 
 export interface MonthGuess {
   attributionMonth: string; // 귀속월 (YYYY-MM)
@@ -132,4 +133,92 @@ export function parseTextMemo(text: string, fileName = "메모.txt"): LedgerEntr
     };
     return classifyRow(cells, ctx);
   });
+}
+
+// ---------------------------------------------------------------------------
+// 매출 수금 — 신한은행 입금내역 파싱
+// ---------------------------------------------------------------------------
+
+let RECEIPT_SEQ = 1;
+
+function pickCell(cells: Record<string, unknown>, candidates: string[]): string {
+  for (const cand of candidates) {
+    for (const key of Object.keys(cells)) {
+      if (key.replace(/\s+/g, "").includes(cand)) {
+        const v = cells[key];
+        if (v != null && String(v).trim() !== "") return String(v).trim();
+      }
+    }
+  }
+  return "";
+}
+
+function pickNumber(cells: Record<string, unknown>, candidates: string[]): number {
+  const raw = pickCell(cells, candidates);
+  if (!raw) return 0;
+  const n = Number(raw.replace(/[,\\₩원\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 엑셀 날짜(숫자 시리얼 또는 문자열)를 YYYY-MM-DD로 정규화. */
+function normDate(raw: string): string {
+  if (!raw) return "";
+  // 숫자 시리얼(엑셀 날짜)
+  if (/^\d{4,6}$/.test(raw)) {
+    const serial = Number(raw);
+    const ms = (serial - 25569) * 86400 * 1000; // 1970-01-01 기준
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  const m = raw.match(/(20\d{2})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  return raw;
+}
+
+/**
+ * 신한은행 입금내역 파일을 파싱해 매출 수금 후보를 만든다.
+ * 입금액이 있는 행만 사용하고, 적요/입금자에서 프로젝트를 추측한다.
+ * 일반 파서이므로 다양한 컬럼명을 흡수한다.
+ */
+export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const month = guessMonthFromFileName(file.name);
+  const out: RevenueReceipt[] = [];
+
+  for (const sheetName of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName], {
+      defval: null,
+      raw: false,
+    });
+    for (const cells of rows) {
+      const deposit = pickNumber(cells, ["입금액", "입금", "맡기신금액", "입금금액"]);
+      const generic = deposit || pickNumber(cells, ["금액", "거래금액", "공급가"]);
+      if (generic <= 0) continue; // 입금(또는 금액) 있는 행만
+
+      const text =
+        pickCell(cells, ["적요", "내용", "입금자", "보낸분", "의뢰인", "비고", "거래내용", "메모"]) ||
+        Object.values(cells).map((v) => (v == null ? "" : String(v))).join(" ");
+      const dateRaw = pickCell(cells, ["거래일시", "거래일자", "거래일", "일자", "날짜", "date"]);
+      const receiptDate = normDate(dateRaw);
+      const bankName = pickCell(cells, ["은행", "거래점", "bank"]) || "신한은행";
+
+      // 적요/입금자에서 프로젝트 추측
+      const matched = matchProjectAlias(text);
+
+      out.push({
+        id: `R-${RECEIPT_SEQ++}`,
+        receiptMonth: receiptDate ? receiptDate.slice(0, 7) : month.paymentMonth,
+        clientName: matched?.canonicalClient ?? "",
+        projectName: matched?.canonicalProject ?? "",
+        bankName,
+        receiptDate,
+        supplyAmount: generic,
+        memo: text.slice(0, 60),
+        confirmed: false,
+        rawText: text,
+      });
+    }
+  }
+  return out;
 }
