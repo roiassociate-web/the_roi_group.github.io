@@ -31,6 +31,34 @@ describe("신한은행 입금내역 파서", () => {
     expect(receipts[0].supplyAmount).toBe(4_812_500);
     expect(receipts[0].receiptDate).toBe("2026-03-05");
     expect(receipts[0].rawText).toContain("한국자산관리공사");
+    expect(receipts[0].excluded).toBe(false);
+  });
+
+  it("환불 입금(카카오·쿠팡·KTX)은 제외로 표시한다", async () => {
+    const file = makeDepositFile([
+      headers({ 입금액: "30,000", 내용: "카카오페이 환불" }),
+      headers({ 입금액: "12,000", 내용: "쿠팡" }),
+      headers({ 입금액: "47,000", 내용: "코레일 KTX 취소" }),
+      headers({ 입금액: "5,000,000", 내용: "삼송전자" }),
+    ]);
+    const receipts = await parseDepositFile(file);
+    expect(receipts).toHaveLength(4);
+    const excluded = receipts.filter((r) => r.excluded);
+    expect(excluded).toHaveLength(3); // 카카오/쿠팡/KTX
+    const real = receipts.find((r) => !r.excluded);
+    expect(real?.supplyAmount).toBe(5_000_000);
+  });
+
+  it("환불로 제외된 수금은 수당 계산에 들어가지 않는다", () => {
+    const st = buildIncentiveStatements(
+      [
+        receipt({ supplyAmount: 1_000_000, projectName: "P2", excluded: true, excludeReason: "환불" }),
+      ],
+      [],
+      [{ id: "p2", projectName: "P2", clientName: "c", educationName: "", assignments: [{ recipient: "김", role: "운영" }] }],
+      "2026-03"
+    );
+    expect(st).toHaveLength(0);
   });
 });
 
@@ -46,6 +74,7 @@ function receipt(over: Partial<RevenueReceipt>): RevenueReceipt {
   return {
     id: "r1", receiptMonth: "2026-03", clientName: "한국자산관리공사", projectName: "P1",
     bankName: "신한은행", receiptDate: "2026-03-05", supplyAmount: 0, memo: "", confirmed: true, rawText: "",
+    excluded: false, excludeReason: "",
     ...over,
   };
 }

@@ -213,4 +213,6 @@ export interface RevenueReceipt {
   memo: string;
   confirmed: boolean; // 대표 확인 여부
   rawText: string; // 원본 적요/입금자(매칭 참고용)
+  excluded: boolean; // 매출 수금 아님(환불 등) → 수당 계산 제외
+  excludeReason: string; // 제외 사유 (예: 환불 의심)
 }

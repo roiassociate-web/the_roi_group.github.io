@@ -200,9 +200,30 @@ function normDate(raw: string): string {
 }
 
 /**
+ * 매출 수금이 아닌 '환불 입금'으로 의심되는 키워드.
+ * (카카오·쿠팡·KTX 등 비용 환불은 수당 계산에서 빼야 한다)
+ * 여기만 고치면 제외 규칙을 쉽게 바꿀 수 있다.
+ */
+export const REFUND_KEYWORDS = [
+  "환불", "취소", "반품", "결제취소",
+  "카카오", "쿠팡", "ktx", "코레일", "기차", "철도",
+  "네이버페이", "토스페이", "배민", "요기요", "11번가", "지마켓", "옥션",
+  "인터파크", "야놀자", "여기어때", "대한항공", "아시아나", "항공", "스타벅스",
+];
+
+/** 내용/적요가 환불 입금으로 보이는지 판단한다. */
+export function looksLikeRefund(text: string): string {
+  const t = (text || "").toLowerCase();
+  for (const k of REFUND_KEYWORDS) {
+    if (t.includes(k.toLowerCase())) return k;
+  }
+  return "";
+}
+
+/**
  * 신한은행 입금내역 파일을 파싱해 매출 수금 후보를 만든다.
- * 입금액이 있는 행만 사용하고, 적요/입금자에서 프로젝트를 추측한다.
- * 일반 파서이므로 다양한 컬럼명을 흡수한다.
+ * 입금액이 있는 행만 사용하고, 내용에서 프로젝트를 추측한다.
+ * 환불 의심 입금은 '제외'로 표시한다.
  */
 export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
   const buf = await file.arrayBuffer();
@@ -235,6 +256,8 @@ export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
 
       // '내용'에서 프로젝트(고객사) 추측
       const matched = matchProjectAlias(content) || matchProjectAlias(clue);
+      // 환불 입금(카카오·쿠팡·KTX 등)은 매출 수금이 아니므로 제외 표시
+      const refund = looksLikeRefund(clue);
 
       out.push({
         id: `R-${RECEIPT_SEQ++}`,
@@ -247,6 +270,8 @@ export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
         memo: (content || clue).slice(0, 60),
         confirmed: false,
         rawText: clue || content,
+        excluded: !!refund,
+        excludeReason: refund ? `${refund} — 환불 입금으로 보여요` : "",
       });
     }
   }
