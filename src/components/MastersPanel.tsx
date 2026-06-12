@@ -79,8 +79,8 @@ function PayeeMasterSection() {
     setForm(EMPTY_PAYEE);
     setAliasText("");
   }
-  function remove(name: string) {
-    removePayeeMaster(name);
+  function remove(idOrName: string) {
+    removePayeeMaster(idOrName);
     setList(getPayeeMasters());
   }
 
@@ -89,7 +89,7 @@ function PayeeMasterSection() {
       {list.length > 0 && (
         <ul className="space-y-2">
           {list.map((p) => (
-            <li key={p.name} className="flex items-center justify-between rounded-2xl bg-surface-muted px-3 py-2">
+            <li key={p.id ?? p.name} className="flex items-center justify-between rounded-2xl bg-surface-muted px-3 py-2">
               <div>
                 <p className="text-sm font-semibold">{p.name} <span className="text-xs font-normal text-ink-faint">· {p.partyType}</span></p>
                 <p className="text-xs text-ink-faint">
@@ -101,7 +101,7 @@ function PayeeMasterSection() {
                   <p className="text-xs text-ink-faint">별칭: {p.aliases!.join(", ")}</p>
                 )}
               </div>
-              <button className="text-xs text-danger" onClick={() => remove(p.name)}>삭제</button>
+              <button className="text-xs text-danger" onClick={() => remove(p.id ?? p.name)}>삭제</button>
             </li>
           ))}
         </ul>

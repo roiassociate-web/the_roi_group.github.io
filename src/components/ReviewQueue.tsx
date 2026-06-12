@@ -5,7 +5,7 @@ import { LedgerEntry, EvidenceType, PartyType, PaymentStatus } from "@/lib/types
 import { useSettlementStore } from "@/store/useSettlementStore";
 import { reclassify, isApprovable } from "@/lib/classificationRules";
 import { isKnownBank } from "@/lib/bankCodes";
-import { suggestPayeeMasters, addPayeeAlias } from "@/lib/masters";
+import { suggestPayeeMasters, addPayeeAlias, findPayeeMasterMatches } from "@/lib/masters";
 import { won } from "@/lib/format";
 import EditModal from "./EditModal";
 
@@ -138,28 +138,40 @@ function QueueCard({ entry, onResolved }: CardProps) {
   const merged = { ...entry, ...draft };
   const amount = merged.netAmount || merged.preTaxAmount || merged.totalAmount;
 
+  // 이름이 같은 대상자가 여럿이면(동명이인) "어느 분인가요?"로 고르게 한다.
+  const homonyms = useMemo(
+    () => (entry.idOrBizNumber ? [] : findPayeeMasterMatches(entry.payeeName)),
+    [entry.payeeName, entry.idOrBizNumber]
+  );
   // 등록된 대상자와 비슷한 이름이면 최초 매핑을 제안한다(한 번 연결하면 다음부터 자동).
   const masterSuggestions = useMemo(
     () => suggestPayeeMasters(entry.payeeName),
     [entry.payeeName]
   );
-  const showMapping = !mappingDismissed && masterSuggestions.length > 0;
+  const showHomonym = !mappingDismissed && homonyms.length > 1;
+  const showMapping = !mappingDismissed && homonyms.length === 0 && masterSuggestions.length > 0;
 
-  function pickMaster(masterName: string) {
-    const m = masterSuggestions.find((x) => x.name === masterName);
-    if (!m) return;
-    // 별칭으로 저장 → 다음부터 자동 매핑된다.
-    addPayeeAlias(m.name, entry.payeeName);
-    // 마스터 정보를 초안에 채운다(빈 값만).
+  function fillFromMaster(m: { id?: string; bankName: string; bankCode: string; accountNumber: string; accountHolder: string; idOrBizNumber: string; partyType: LedgerEntry["partyType"]; name: string }, alias: boolean) {
+    // 별칭으로 저장 → 다음부터 자동 매핑된다(동명이인은 같은 이름이라 별칭 저장은 생략됨).
+    if (alias && m.id) addPayeeAlias(m.id, entry.payeeName);
     setDraft((d) => ({
       ...d,
       bankName: d.bankName ?? (entry.bankName || m.bankName),
       accountNumber: d.accountNumber ?? (entry.accountNumber || m.accountNumber),
       accountHolder: d.accountHolder ?? (entry.accountHolder || m.accountHolder),
+      // 동명이인 구분의 진짜 키 — 번호를 채워 이후 매핑이 정확해지게 한다.
       idOrBizNumber: d.idOrBizNumber ?? (entry.idOrBizNumber || m.idOrBizNumber),
       partyType: entry.partyType === "확인 필요" ? m.partyType : entry.partyType,
     }));
     setMappingDismissed(true);
+  }
+
+  /** 동명이인 후보를 은행·계좌 끝자리로 구분해 보여준다. */
+  function homonymLabel(m: { name: string; bankName: string; accountNumber: string; idOrBizNumber: string }): string {
+    const tail = m.accountNumber ? m.accountNumber.replace(/\D/g, "").slice(-4) : "";
+    const idHead = m.idOrBizNumber ? m.idOrBizNumber.replace(/[^0-9*]/g, "").slice(0, 6) : "";
+    const parts = [m.bankName, tail && `…${tail}`, idHead && `(${idHead})`].filter(Boolean);
+    return `${m.name}${parts.length ? " · " + parts.join(" ") : ""}`;
   }
 
   // 이 항목에서 물어볼 것들만 추려낸다.
@@ -228,14 +240,37 @@ function QueueCard({ entry, onResolved }: CardProps) {
         {entry.isBulkTransfer ? " 대량이체에 포함돼요." : ""}
       </p>
 
+      {/* 동명이인 — 어느 분인지 고르게 한다 */}
+      {showHomonym && (
+        <Question label={`'${entry.payeeName}' 이름이 같은 대상자가 ${homonyms.length}명 있어요. 어느 분인가요?`}>
+          <div className="flex flex-col gap-2">
+            {homonyms.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => fillFromMaster(m, false)}
+                className="rounded-xl bg-surface px-4 py-2.5 text-left text-sm font-semibold text-ink-soft"
+              >
+                {homonymLabel(m)}
+              </button>
+            ))}
+            <button
+              onClick={() => setMappingDismissed(true)}
+              className="rounded-xl px-4 py-2.5 text-left text-sm text-ink-faint"
+            >
+              여기 없어요 (새 대상자예요)
+            </button>
+          </div>
+        </Question>
+      )}
+
       {/* 최초 매핑 — 한 번 연결하면 다음부터 자동 매핑 */}
       {showMapping && (
         <Question label={`혹시 등록된 대상자인가요? 연결하면 다음부터 자동으로 채워져요.`}>
           <div className="flex flex-wrap gap-2">
             {masterSuggestions.map((m) => (
               <button
-                key={m.name}
-                onClick={() => pickMaster(m.name)}
+                key={m.id}
+                onClick={() => fillFromMaster(m, true)}
                 className="rounded-xl bg-surface px-4 py-2.5 text-sm font-semibold text-ink-soft"
               >
                 {m.name}{m.bankName ? ` · ${m.bankName}` : ""}

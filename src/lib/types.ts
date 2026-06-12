@@ -142,6 +142,7 @@ export interface RawRow {
  * 한 번 입력/매핑하면 다음부터 자동으로 채워진다.
  */
 export interface PayeeMaster {
+  id?: string; // 안정적인 고유키. 동명이인을 구분하기 위해 이름이 아니라 id로 저장한다.
   name: string; // 성명 또는 업체명 (표준 표기)
   aliases?: string[]; // 다른 표기들 ("김철수 강사" 등). 한 번 매핑하면 여기 저장된다.
   partyType: PartyType;
