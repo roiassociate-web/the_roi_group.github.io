@@ -1,7 +1,38 @@
 import { describe, it, expect } from "vitest";
+import * as XLSX from "xlsx";
 import { buildIncentiveStatements, projectCostBasis } from "./incentive";
+import { parseDepositFile } from "./parseFiles";
 import { LedgerEntry, ProjectInfo, RevenueReceipt } from "./types";
 import { classifyRow } from "./classificationRules";
+
+// 신한은행 입금내역 형식의 가짜 파일을 만든다.
+function makeDepositFile(rows: Record<string, unknown>[]): File {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "내역");
+  const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  return new File([buf], "신한_입금내역_3월.xlsx");
+}
+
+describe("신한은행 입금내역 파서", () => {
+  const headers = (over: Record<string, unknown>) => ({
+    No: 1, 전체선택: "", 거래일시: "2026-03-05 14:23:01", 적요: "", 입금액: "",
+    출금액: "", 내용: "", 잔액: "10000000", 거래점명: "본점", 입금인코드: "0001", 메모: "",
+    ...over,
+  });
+
+  it("입금액 행만 잡고 출금 행은 무시한다 (입금인코드를 금액으로 오인하지 않음)", async () => {
+    const file = makeDepositFile([
+      headers({ 입금액: "4,812,500", 내용: "한국자산관리공사", 입금인코드: "9999" }),
+      headers({ 출금액: "500,000", 내용: "임대료" }),
+    ]);
+    const receipts = await parseDepositFile(file);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].supplyAmount).toBe(4_812_500);
+    expect(receipts[0].receiptDate).toBe("2026-03-05");
+    expect(receipts[0].rawText).toContain("한국자산관리공사");
+  });
+});
 
 function ledgerEntry(over: Partial<LedgerEntry>): LedgerEntry {
   const base = classifyRow({ 대상자: "x", 비용유형: "기타", 금액: 0 }, {

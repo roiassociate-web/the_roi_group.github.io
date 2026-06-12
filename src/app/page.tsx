@@ -16,7 +16,7 @@ import MastersPanel from "@/components/MastersPanel";
 import IncentivePanel from "@/components/IncentivePanel";
 
 // 배포 확인용 빌드 표시(새 버전이 떴는지 서로 확인할 때 사용).
-const BUILD_TAG = "build r9 · 06-12";
+const BUILD_TAG = "build r10 · 06-12";
 
 type View =
   | "home"

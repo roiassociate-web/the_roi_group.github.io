@@ -160,18 +160,42 @@ function pickNumber(cells: Record<string, unknown>, candidates: string[]): numbe
   return Number.isFinite(n) ? n : 0;
 }
 
+/** 컬럼명을 '정확히' 매칭한다(부분 일치로 인한 오인 방지: 입금액 vs 입금인코드). */
+function exactCell(cells: Record<string, unknown>, names: string[]): string {
+  for (const key of Object.keys(cells)) {
+    const nk = key.replace(/\s+/g, "");
+    if (names.includes(nk)) {
+      const v = cells[key];
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+  }
+  return "";
+}
+
+function exactNumber(cells: Record<string, unknown>, names: string[]): number {
+  const raw = exactCell(cells, names);
+  if (!raw) return 0;
+  const n = Number(raw.replace(/[,\\₩원\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function hasColumn(cells: Record<string, unknown>, names: string[]): boolean {
+  return Object.keys(cells).some((k) => names.includes(k.replace(/\s+/g, "")));
+}
+
 /** 엑셀 날짜(숫자 시리얼 또는 문자열)를 YYYY-MM-DD로 정규화. */
 function normDate(raw: string): string {
   if (!raw) return "";
-  // 숫자 시리얼(엑셀 날짜)
-  if (/^\d{4,6}$/.test(raw)) {
-    const serial = Number(raw);
+  // "2026-03-05 14:23:01" / "2026.03.05" 등 문자열 날짜
+  const m = raw.match(/(20\d{2})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  // 엑셀 시리얼(날짜 또는 날짜+시간 소수)
+  if (/^\d{4,6}(\.\d+)?$/.test(raw)) {
+    const serial = Math.floor(Number(raw));
     const ms = (serial - 25569) * 86400 * 1000; // 1970-01-01 기준
     const d = new Date(ms);
     if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
-  const m = raw.match(/(20\d{2})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
-  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
   return raw;
 }
 
@@ -191,20 +215,26 @@ export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
       defval: null,
       raw: false,
     });
+    const depCol = hasColumn(rows[0] ?? {}, ["입금액", "입금금액", "맡기신금액"]);
     for (const cells of rows) {
-      const deposit = pickNumber(cells, ["입금액", "입금", "맡기신금액", "입금금액"]);
-      const generic = deposit || pickNumber(cells, ["금액", "거래금액", "공급가"]);
-      if (generic <= 0) continue; // 입금(또는 금액) 있는 행만
+      // 입금액 컬럼이 있으면 그것만(출금 행 자동 제외), 없으면 일반 금액 컬럼으로 폴백.
+      const amount = depCol
+        ? exactNumber(cells, ["입금액", "입금금액", "맡기신금액"])
+        : pickNumber(cells, ["금액", "거래금액", "공급가"]);
+      if (amount <= 0) continue; // 입금 있는 행만(매출 수금)
 
-      const text =
-        pickCell(cells, ["적요", "내용", "입금자", "보낸분", "의뢰인", "비고", "거래내용", "메모"]) ||
-        Object.values(cells).map((v) => (v == null ? "" : String(v))).join(" ");
+      // 신한은행: 보낸 회사 단서는 '내용'에 있다. 내용 우선 + 적요/메모 보조.
+      const content = pickCell(cells, ["내용", "거래내용"]);
+      const summary = pickCell(cells, ["적요", "입금자", "보낸분", "의뢰인"]);
+      const memoCol = pickCell(cells, ["메모", "비고"]);
+      const clue = [content, summary, memoCol].filter(Boolean).join(" ");
+
       const dateRaw = pickCell(cells, ["거래일시", "거래일자", "거래일", "일자", "날짜", "date"]);
       const receiptDate = normDate(dateRaw);
-      const bankName = pickCell(cells, ["은행", "거래점", "bank"]) || "신한은행";
+      const bankName = "신한은행";
 
-      // 적요/입금자에서 프로젝트 추측
-      const matched = matchProjectAlias(text);
+      // '내용'에서 프로젝트(고객사) 추측
+      const matched = matchProjectAlias(content) || matchProjectAlias(clue);
 
       out.push({
         id: `R-${RECEIPT_SEQ++}`,
@@ -213,10 +243,10 @@ export async function parseDepositFile(file: File): Promise<RevenueReceipt[]> {
         projectName: matched?.canonicalProject ?? "",
         bankName,
         receiptDate,
-        supplyAmount: generic,
-        memo: text.slice(0, 60),
+        supplyAmount: amount,
+        memo: (content || clue).slice(0, 60),
         confirmed: false,
-        rawText: text,
+        rawText: clue || content,
       });
     }
   }
