@@ -186,7 +186,10 @@ export const useSettlementStore = create<SettlementState>()(
         const revisions = [...e.revisions, ...diffRevisions(e, patch, reason)];
         // 수정 후 재분류(세금/플래그/사유/신뢰도 갱신).
         const merged = reclassify({ ...e, ...patch, revisions });
-        return { ...merged, itemStatus: "수정완료" as ItemStatus };
+        // 확인 사유가 아직 남아 있으면 검토함에 계속 둔다(부분 수정 대응).
+        const nextStatus: ItemStatus =
+          merged.reviewReasons.length > 0 ? "확인필요" : "수정완료";
+        return { ...merged, itemStatus: nextStatus };
       }),
     })),
 

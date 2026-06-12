@@ -37,7 +37,7 @@ const yn = (b: boolean) => (b ? "Y" : "N");
  * - 사업소득(원천세 계산됨): 실지급액
  * - 그 외(세금계산서 등): 부가세 포함 총금액
  */
-function payableAmount(e: LedgerEntry): number {
+export function payableAmount(e: LedgerEntry): number {
   if (e.evidenceType === "사업소득 신고" && e.netAmount > 0) return e.netAmount;
   return e.totalAmount || e.preTaxAmount || e.netAmount;
 }
