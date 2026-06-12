@@ -9,6 +9,7 @@ import {
   applyPayeeMaster,
   applyProjectAlias,
   getRecurringTemplates,
+  learnPayeeFromEntry,
   recurringToEntries,
   saveRecurringFromLedger,
 } from "@/lib/masters";
@@ -140,9 +141,12 @@ export const useSettlementStore = create<SettlementState>()(
 
   approve: (id) =>
     set((state) => ({
-      entries: state.entries.map((e) =>
-        e.settlementId === id ? { ...e, itemStatus: "승인완료" as ItemStatus } : e
-      ),
+      entries: state.entries.map((e) => {
+        if (e.settlementId !== id) return e;
+        // 승인된 정보는 지급대상자 마스터에 자동 학습한다(다음 달 자동 매핑).
+        learnPayeeFromEntry(e);
+        return { ...e, itemStatus: "승인완료" as ItemStatus };
+      }),
     })),
 
   bulkApproveHighConfidence: () => {
@@ -157,6 +161,7 @@ export const useSettlementStore = create<SettlementState>()(
           e.itemStatus !== "승인완료";
         if (eligible) {
           count++;
+          learnPayeeFromEntry(e);
           return { ...e, itemStatus: "승인완료" as ItemStatus };
         }
         return e;
@@ -189,6 +194,8 @@ export const useSettlementStore = create<SettlementState>()(
         // 확인 사유가 아직 남아 있으면 검토함에 계속 둔다(부분 수정 대응).
         const nextStatus: ItemStatus =
           merged.reviewReasons.length > 0 ? "확인필요" : "수정완료";
+        // 정리 완료된 항목은 마스터에 자동 학습한다.
+        if (nextStatus === "수정완료") learnPayeeFromEntry(merged);
         return { ...merged, itemStatus: nextStatus };
       }),
     })),
@@ -201,14 +208,15 @@ export const useSettlementStore = create<SettlementState>()(
     {
       name: "settlement-ledger", // localStorage 키
       storage: safeStorage,
-      version: 2,
-      // v1 → v2: 원천징수 유형 필드(withholdingType) 추가. 기존 데이터는 사업소득으로 채운다.
+      version: 3,
+      // v1→v2: withholdingType 추가 / v2→v3: idOrBizNumber 추가.
       migrate: (persisted: unknown) => {
         const state = persisted as Partial<SettlementState> | undefined;
         if (state?.entries) {
           state.entries = state.entries.map((e) => ({
             ...e,
             withholdingType: e.withholdingType ?? "사업소득",
+            idOrBizNumber: e.idOrBizNumber ?? "",
           }));
         }
         return state as SettlementState;

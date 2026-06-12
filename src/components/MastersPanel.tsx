@@ -49,6 +49,7 @@ function Section({ title, desc, children }: { title: string; desc: string; child
 // ---------------------------------------------------------------------------
 const EMPTY_PAYEE: PayeeMaster = {
   name: "",
+  aliases: [],
   partyType: "개인",
   bankName: "",
   bankCode: "",
@@ -57,19 +58,26 @@ const EMPTY_PAYEE: PayeeMaster = {
   idOrBizNumber: "",
   defaultEvidence: "사업소득 신고",
   defaultWithholding: true,
+  defaultWithholdingType: "사업소득",
 };
 
 function PayeeMasterSection() {
   const [list, setList] = useState<PayeeMaster[]>([]);
   const [form, setForm] = useState<PayeeMaster>(EMPTY_PAYEE);
+  const [aliasText, setAliasText] = useState("");
 
   useEffect(() => setList(getPayeeMasters()), []);
 
   function save() {
     if (!form.name.trim()) return;
-    upsertPayeeMaster({ ...form, accountHolder: form.accountHolder || form.name });
+    upsertPayeeMaster({
+      ...form,
+      accountHolder: form.accountHolder || form.name,
+      aliases: aliasText.split(",").map((s) => s.trim()).filter(Boolean),
+    });
     setList(getPayeeMasters());
     setForm(EMPTY_PAYEE);
+    setAliasText("");
   }
   function remove(name: string) {
     removePayeeMaster(name);
@@ -77,7 +85,7 @@ function PayeeMasterSection() {
   }
 
   return (
-    <Section title="지급대상자 마스터" desc="성명/업체명 기준으로 계좌·증빙·원천세 여부를 저장해요.">
+    <Section title="지급대상자 마스터" desc="지급처 DB예요. 항목을 승인하면 자동으로 저장되고, 같은 대상자는 다음부터 자동 매핑돼요.">
       {list.length > 0 && (
         <ul className="space-y-2">
           {list.map((p) => (
@@ -85,8 +93,13 @@ function PayeeMasterSection() {
               <div>
                 <p className="text-sm font-semibold">{p.name} <span className="text-xs font-normal text-ink-faint">· {p.partyType}</span></p>
                 <p className="text-xs text-ink-faint">
-                  {p.bankName || "은행 미입력"} {p.accountNumber} {p.defaultWithholding ? "· 원천세 대상" : ""}
+                  {p.bankName || "은행 미입력"} {p.accountNumber}
+                  {p.idOrBizNumber ? ` · ${p.idOrBizNumber}` : ""}
+                  {p.defaultWithholding ? ` · ${p.defaultWithholdingType ?? "사업소득"}` : ""}
                 </p>
+                {(p.aliases?.length ?? 0) > 0 && (
+                  <p className="text-xs text-ink-faint">별칭: {p.aliases!.join(", ")}</p>
+                )}
               </div>
               <button className="text-xs text-danger" onClick={() => remove(p.name)}>삭제</button>
             </li>
@@ -106,10 +119,15 @@ function PayeeMasterSection() {
         <select className="ds-input" value={form.defaultEvidence} onChange={(e) => setForm({ ...form, defaultEvidence: e.target.value as PayeeMaster["defaultEvidence"] })}>
           {EVIDENCE_TYPES.map((o) => <option key={o}>{o}</option>)}
         </select>
+        <select className="ds-input" value={form.defaultWithholdingType ?? "사업소득"} onChange={(e) => setForm({ ...form, defaultWithholdingType: e.target.value as PayeeMaster["defaultWithholdingType"] })}>
+          <option value="사업소득">사업소득 3.3%</option>
+          <option value="기타소득">기타소득 8.8%</option>
+        </select>
         <label className="flex items-center gap-2 px-1 text-sm text-ink-soft">
           <input type="checkbox" checked={form.defaultWithholding} onChange={(e) => setForm({ ...form, defaultWithholding: e.target.checked })} />
           원천세 대상
         </label>
+        <input className="ds-input col-span-2" placeholder="별칭 (쉼표 구분: 김철수 강사, 철수쌤)" value={aliasText} onChange={(e) => setAliasText(e.target.value)} />
       </div>
       <button className="ds-btn-primary w-full" onClick={save}>대상자 저장</button>
       <PanelInputStyle />
