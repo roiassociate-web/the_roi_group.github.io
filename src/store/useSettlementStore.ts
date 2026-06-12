@@ -6,12 +6,12 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { LedgerEntry, ItemStatus, RevisionLog } from "@/lib/types";
 import { reclassify } from "@/lib/classificationRules";
 import {
-  applyPayeeMaster,
-  applyProjectAlias,
+  enrichEntry,
   getRecurringTemplates,
   learnPayeeFromEntry,
   recurringToEntries,
   saveRecurringFromLedger,
+  RECURRING_NOTE,
 } from "@/lib/masters";
 
 export type WizardStep =
@@ -89,9 +89,7 @@ export const useSettlementStore = create<SettlementState>()(
   addEntries: (incoming, fileName) =>
     set((state) => {
       // 업로드 시 지급대상자 마스터 + 약칭 사전을 자동 적용한다(입력 줄이기).
-      const enriched = incoming.map((e) =>
-        reclassify(applyProjectAlias(applyPayeeMaster(e)))
-      );
+      const enriched = incoming.map((e) => enrichEntry(e));
       return {
         entries: [...state.entries, ...enriched],
         loadedFiles: fileName
@@ -103,7 +101,7 @@ export const useSettlementStore = create<SettlementState>()(
 
   loadSample: (entries) =>
     set((state) => ({
-      entries: entries.map((e) => reclassify(e)),
+      entries: entries.map((e) => enrichEntry(e)),
       loadedFiles: [...new Set([...state.loadedFiles, "샘플데이터_5월.xlsx"])],
       completedSteps: { ...state.completedSteps, "자료 넣기": true },
     })),
@@ -118,7 +116,7 @@ export const useSettlementStore = create<SettlementState>()(
       state.entries[0]?.attributionMonth ??
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     const enriched = recurringToEntries(templates, ym).map((e) =>
-      reclassify(applyProjectAlias(applyPayeeMaster(e)))
+      enrichEntry(e, [RECURRING_NOTE])
     );
     set({
       entries: [...state.entries, ...enriched],
