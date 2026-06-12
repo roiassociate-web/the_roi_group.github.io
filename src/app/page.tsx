@@ -14,6 +14,9 @@ import DownloadPanel from "@/components/DownloadPanel";
 import ReportMessage from "@/components/ReportMessage";
 import MastersPanel from "@/components/MastersPanel";
 
+// 배포 확인용 빌드 표시(새 버전이 떴는지 서로 확인할 때 사용).
+const BUILD_TAG = "build r8 · 06-12";
+
 type View =
   | "home"
   | "upload"
@@ -148,7 +151,7 @@ export default function Page() {
                 <SmallLink label="처음부터 다시" onClick={onReset} danger />
               </div>
               <p className="pb-2 text-center text-xs text-ink-faint">
-                작업 내용은 이 기기에 자동 저장돼요.
+                작업 내용은 이 기기에 자동 저장돼요. · {BUILD_TAG}
               </p>
             </>
           )}
