@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { LedgerEntry, ItemStatus, RevisionLog } from "@/lib/types";
+import { LedgerEntry, ItemStatus, RevisionLog, RevenueReceipt } from "@/lib/types";
 import { reclassify } from "@/lib/classificationRules";
 import {
   enrichEntry,
@@ -23,6 +23,7 @@ export type WizardStep =
 
 interface SettlementState {
   entries: LedgerEntry[];
+  receipts: RevenueReceipt[]; // 매출 수금(수당 계산용)
   loadedFiles: string[];
   completedSteps: Record<WizardStep, boolean>;
 
@@ -31,6 +32,11 @@ interface SettlementState {
   importRecurring: () => number;
   saveRecurring: () => number;
   reset: () => void;
+
+  addReceipts: (receipts: RevenueReceipt[]) => void;
+  updateReceipt: (id: string, patch: Partial<RevenueReceipt>) => void;
+  confirmReceipt: (id: string, confirmed: boolean) => void;
+  removeReceipt: (id: string) => void;
 
   approve: (id: string) => void;
   bulkApproveHighConfidence: () => number;
@@ -83,8 +89,22 @@ export const useSettlementStore = create<SettlementState>()(
   persist(
     (set, get) => ({
   entries: [],
+  receipts: [],
   loadedFiles: [],
   completedSteps: { ...STEP_DEFAULT },
+
+  addReceipts: (incoming) =>
+    set((state) => ({ receipts: [...state.receipts, ...incoming] })),
+  updateReceipt: (id, patch) =>
+    set((state) => ({
+      receipts: state.receipts.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    })),
+  confirmReceipt: (id, confirmed) =>
+    set((state) => ({
+      receipts: state.receipts.map((r) => (r.id === id ? { ...r, confirmed } : r)),
+    })),
+  removeReceipt: (id) =>
+    set((state) => ({ receipts: state.receipts.filter((r) => r.id !== id) })),
 
   addEntries: (incoming, fileName) =>
     set((state) => {
@@ -135,7 +155,7 @@ export const useSettlementStore = create<SettlementState>()(
   },
 
   reset: () =>
-    set({ entries: [], loadedFiles: [], completedSteps: { ...STEP_DEFAULT } }),
+    set({ entries: [], receipts: [], loadedFiles: [], completedSteps: { ...STEP_DEFAULT } }),
 
   approve: (id) =>
     set((state) => ({
@@ -206,8 +226,8 @@ export const useSettlementStore = create<SettlementState>()(
     {
       name: "settlement-ledger", // localStorage 키
       storage: safeStorage,
-      version: 3,
-      // v1→v2: withholdingType 추가 / v2→v3: idOrBizNumber 추가.
+      version: 4,
+      // v1→v2: withholdingType / v2→v3: idOrBizNumber / v3→v4: receipts(매출 수금) 추가.
       migrate: (persisted: unknown) => {
         const state = persisted as Partial<SettlementState> | undefined;
         if (state?.entries) {
@@ -217,11 +237,13 @@ export const useSettlementStore = create<SettlementState>()(
             idOrBizNumber: e.idOrBizNumber ?? "",
           }));
         }
+        if (state && !state.receipts) state.receipts = [];
         return state as SettlementState;
       },
-      // 데이터(정산원장/넣은 자료/단계)만 저장한다. 액션 함수는 저장하지 않는다.
+      // 데이터(정산원장/수금/넣은 자료/단계)만 저장한다. 액션 함수는 저장하지 않는다.
       partialize: (state) => ({
         entries: state.entries,
+        receipts: state.receipts,
         loadedFiles: state.loadedFiles,
         completedSteps: state.completedSteps,
       }),

@@ -1,13 +1,14 @@
 // 입력 줄이기 기능을 위한 마스터 데이터.
 // 서버 저장 없이 localStorage에만 보관한다(복잡한 DB는 사용하지 않음).
 
-import { LedgerEntry, ItemStatus, PayeeMaster, ProjectAlias, RecurringTemplate } from "./types";
+import { LedgerEntry, ItemStatus, PayeeMaster, ProjectAlias, ProjectInfo, RecurringTemplate } from "./types";
 import { classifyRow, reclassify, computeConfidence } from "./classificationRules";
 
 const KEYS = {
   payee: "settlement.payeeMaster",
   alias: "settlement.projectAlias",
   recurring: "settlement.recurring",
+  projectInfo: "settlement.projectInfo",
 };
 
 function load<T>(key: string, fallback: T): T {
@@ -378,3 +379,33 @@ export function recurringToEntries(
 
 /** 반복 항목 카드에 붙이는 안내 문구. */
 export const RECURRING_NOTE = "이전 달 반복 항목이에요. 금액과 지급 여부만 확인해 주세요.";
+
+// ---- 프로젝트 마스터 (PM·역할 = 인센티브율) --------------------------------
+
+export function getProjectInfos(): ProjectInfo[] {
+  let changed = false;
+  const list = load<ProjectInfo[]>(KEYS.projectInfo, []).map((p) => {
+    const fixed = { ...p, assignments: p.assignments ?? [] };
+    if (!fixed.id) {
+      fixed.id = genId();
+      changed = true;
+    }
+    return fixed;
+  });
+  if (changed) save(KEYS.projectInfo, list);
+  return list;
+}
+
+export function upsertProjectInfo(p: ProjectInfo): void {
+  const list = getProjectInfos();
+  const idx = p.id
+    ? list.findIndex((x) => x.id === p.id)
+    : list.findIndex((x) => norm(x.projectName) === norm(p.projectName));
+  if (idx >= 0) list[idx] = { ...list[idx], ...p, id: list[idx].id };
+  else list.push({ ...p, id: p.id ?? genId() });
+  save(KEYS.projectInfo, list);
+}
+
+export function removeProjectInfo(id: string): void {
+  save(KEYS.projectInfo, getProjectInfos().filter((x) => x.id !== id));
+}

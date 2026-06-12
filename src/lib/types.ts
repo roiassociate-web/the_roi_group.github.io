@@ -172,3 +172,45 @@ export interface RecurringTemplate {
   defaultPreTaxAmount: number;
   note: string;
 }
+
+// ---------------------------------------------------------------------------
+// 수당명세서(성과 수당) 관련
+// ---------------------------------------------------------------------------
+
+/** PM 역할 → 인센티브율. 제안서 작성 10% / 운영 5%. */
+export const PM_ROLES = ["제안서 작성", "운영"] as const;
+export type PmRole = (typeof PM_ROLES)[number];
+
+export const ROLE_RATE: Record<PmRole, number> = {
+  "제안서 작성": 0.1,
+  운영: 0.05,
+};
+
+/** 프로젝트의 PM 배정(보통 1명, 향후 복수 가능). */
+export interface ProjectAssignment {
+  recipient: string; // 수당 받는 직원(PM)
+  role: PmRole; // 역할 → 비율
+}
+
+/** 프로젝트 마스터 — 고객사/교육명/PM·역할(=비율). */
+export interface ProjectInfo {
+  id?: string;
+  projectName: string; // 표준 프로젝트명
+  clientName: string; // 고객사명
+  educationName: string; // 교육명
+  assignments: ProjectAssignment[]; // PM 배정
+}
+
+/** 매출 수금 — 신한은행 입금내역에서 만든 프로젝트별 수금. */
+export interface RevenueReceipt {
+  id: string;
+  receiptMonth: string; // 수금 귀속월 (YYYY-MM) — 수당 계산 기준
+  clientName: string;
+  projectName: string;
+  bankName: string; // 수금은행
+  receiptDate: string; // 수금일 (YYYY-MM-DD)
+  supplyAmount: number; // 공급가액
+  memo: string;
+  confirmed: boolean; // 대표 확인 여부
+  rawText: string; // 원본 적요/입금자(매칭 참고용)
+}
