@@ -87,7 +87,7 @@ export function buildIncentiveStatements(
   // 1) 이번 달 + 확인된 수금만 프로젝트별로 합산
   const byProject = new Map<string, { revenue: number; clientName: string; receiptDate: string; bankName: string }>();
   for (const r of receipts) {
-    if (r.receiptMonth !== month || !r.confirmed) continue;
+    if (r.receiptMonth !== month || !r.confirmed || r.excluded) continue;
     const key = normName(r.projectName);
     const cur = byProject.get(key) ?? { revenue: 0, clientName: r.clientName, receiptDate: r.receiptDate, bankName: r.bankName };
     cur.revenue += r.supplyAmount;

@@ -164,6 +164,8 @@ function ManualReceiptForm() {
       memo: "수동 입력",
       confirmed: true,
       rawText: "",
+      excluded: false,
+      excludeReason: "",
     };
     addReceipts([r]);
     setF({ projectName: "", clientName: "", supplyAmount: "", receiptDate: "" });
@@ -204,24 +206,28 @@ function ReceiptList() {
   const removeReceipt = useSettlementStore((s) => s.removeReceipt);
 
   if (receipts.length === 0) return null;
-  const pending = receipts.filter((r) => !r.confirmed).length;
+  const active = receipts.filter((r) => !r.excluded);
+  const excluded = receipts.filter((r) => r.excluded);
+  const pending = active.filter((r) => !r.confirmed).length;
 
   return (
     <div className="ds-card space-y-3">
       <p className="text-base font-bold">
         2. 수금 확인 {pending > 0 && <span className="text-sm font-normal text-warn">· 확인 {pending}건</span>}
       </p>
+
       <div className="space-y-2">
-        {receipts.map((r) => (
+        {active.map((r) => (
           <div key={r.id} className="rounded-2xl bg-surface-muted p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold">{won(r.supplyAmount)}</p>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-ink-faint">{r.receiptDate || "날짜?"}</span>
+                <button className="text-ink-faint" onClick={() => updateReceipt(r.id, { excluded: true, excludeReason: "직접 제외" })}>수금 아님</button>
                 <button className="text-danger" onClick={() => removeReceipt(r.id)}>삭제</button>
               </div>
             </div>
-            {r.rawText && <p className="text-xs text-ink-faint">적요: {r.rawText.slice(0, 50)}</p>}
+            {r.rawText && <p className="text-xs text-ink-faint">내용: {r.rawText.slice(0, 50)}</p>}
             <div className="grid grid-cols-2 gap-2">
               <input
                 className="ds-input"
@@ -247,7 +253,35 @@ function ReceiptList() {
             </button>
           </div>
         ))}
+        {active.length === 0 && (
+          <p className="text-sm text-ink-faint">수금으로 잡힌 입금이 없어요.</p>
+        )}
       </div>
+
+      {/* 환불 등으로 제외된 입금 */}
+      {excluded.length > 0 && (
+        <div className="rounded-2xl bg-[#fbfbfc] p-3">
+          <p className="mb-2 text-xs font-semibold text-ink-faint">
+            수금 아님 · 제외 {excluded.length}건 (환불 등)
+          </p>
+          <div className="space-y-1.5">
+            {excluded.map((r) => (
+              <div key={r.id} className="flex items-center justify-between text-xs text-ink-faint">
+                <span className="truncate">
+                  {won(r.supplyAmount)} · {r.rawText.slice(0, 24) || r.memo}
+                  {r.excludeReason ? ` · ${r.excludeReason}` : ""}
+                </span>
+                <button
+                  className="shrink-0 font-semibold text-brand"
+                  onClick={() => updateReceipt(r.id, { excluded: false, excludeReason: "" })}
+                >
+                  수금으로 되돌리기
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <PanelInputStyle />
     </div>
   );
@@ -263,7 +297,12 @@ function ProjectSetup({ projects, onChange }: { projects: ProjectInfo[]; onChang
   // 수금엔 있는데 마스터엔 없는 프로젝트 추천
   const known = new Set(projects.map((p) => p.projectName.replace(/\s+/g, "")));
   const missing = Array.from(
-    new Set(receipts.map((r) => r.projectName).filter((n) => n && !known.has(n.replace(/\s+/g, ""))))
+    new Set(
+      receipts
+        .filter((r) => !r.excluded)
+        .map((r) => r.projectName)
+        .filter((n) => n && !known.has(n.replace(/\s+/g, "")))
+    )
   );
 
   function save() {
